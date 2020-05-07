@@ -173,18 +173,19 @@ def participant_scoped_db_lock(participant_code):
         participant_code=participant_code
     ).exists()
     if not exists:
-        raise Http404(
-            (
-                "This user ({}) does not exist in the database. "
-                "Maybe the database was reset."
-            ).format(participant_code)
-        )
+        msg = (
+            "This user ({}) does not exist in the database. "
+            "Maybe the database was reset."
+        ).format(participant_code)
+
+        raise Http404(msg)
 
     # could happen if the request that has the lock is paused somehow,
     # e.g. in a debugger
-    raise Exception(
-        'Another HTTP request has the lock for participant {}.'.format(participant_code)
+    msg = 'Another HTTP request has the lock for participant {}.'.format(
+        participant_code
     )
+    raise Exception(msg)
 
 
 def get_redis_lock(*, name='global'):
@@ -593,9 +594,8 @@ class FormPageOrInGameWaitPage(vanilla.View):
         app_to_skip_to = self.app_after_this_page(upcoming_apps)
         if app_to_skip_to:
             if app_to_skip_to not in upcoming_apps:
-                raise InvalidAppError(
-                    f'"{app_to_skip_to}" is not in the upcoming_apps list'
-                )
+                msg = f'"{app_to_skip_to}" is not in the upcoming_apps list'
+                raise InvalidAppError(msg)
             return (
                 ParticipantToPlayerLookup.objects.filter(
                     participant=self.participant, app_name=app_to_skip_to
@@ -639,6 +639,7 @@ class FormPageOrInGameWaitPage(vanilla.View):
 
     _setattr_whitelist = {
         '_is_frozen',
+		'_index_in_pages',
         'object',
         'form',
         'timeout_happened',
@@ -707,10 +708,11 @@ class Page(FormPageOrInGameWaitPage):
                 return self.PlayerClass
             if form_model == 'group':
                 return self.GroupClass
-            raise ValueError(
+            msg = (
                 "'{}' is an invalid value for form_model. "
                 "Try 'player' or 'group' instead.".format(form_model)
             )
+            raise ValueError(msg)
         return form_model
 
     def get_form_class(self):
@@ -720,11 +722,10 @@ class Page(FormPageOrInGameWaitPage):
             raise ResponseForException
         form_model = self._get_form_model()
         if form_model is UndefinedFormModel and fields:
-            raise Exception(
-                'Page "{}" defined form_fields but not form_model'.format(
-                    self.__class__.__name__
-                )
+            msg = 'Page "{}" defined form_fields but not form_model'.format(
+                self.__class__.__name__
             )
+            raise Exception(msg)
         return django.forms.models.modelform_factory(
             form_model, fields=fields, form=otree.forms.ModelForm
         )
@@ -806,7 +807,7 @@ class Page(FormPageOrInGameWaitPage):
             is_bot = self.participant._is_bot
             if form.is_valid():
                 if is_bot and post_data.get('must_fail'):
-                    raise BotError(
+                    msg = (
                         'Page "{}": Bot tried to submit intentionally invalid '
                         'data with '
                         'SubmissionMustFail, but it passed validation anyway:'
@@ -814,6 +815,7 @@ class Page(FormPageOrInGameWaitPage):
                             self.__class__.__name__, bot_prettify_post_data(post_data)
                         )
                     )
+                    raise BotError(msg)
                 # assigning to self.object is not really necessary
                 self.object = form.save()
             else:
@@ -824,7 +826,7 @@ class Page(FormPageOrInGameWaitPage):
                         errors = [
                             "{}: {}".format(k, repr(v)) for k, v in form.errors.items()
                         ]
-                        raise BotError(
+                        msg = (
                             'Page "{}": Bot submission failed form validation: {} '
                             'Check your bot code, '
                             'then create a new session. '
@@ -832,6 +834,7 @@ class Page(FormPageOrInGameWaitPage):
                                 PageName, errors, bot_prettify_post_data(post_data)
                             )
                         )
+                        raise BotError(msg)
                     if post_data.get('error_fields'):
                         # need to convert to dict because MultiValueKeyDict
                         # doesn't properly retrieve values that are lists
@@ -839,13 +842,14 @@ class Page(FormPageOrInGameWaitPage):
                         expected_error_fields = set(post_data_dict['error_fields'])
                         actual_error_fields = set(form.errors.keys())
                         if not expected_error_fields == actual_error_fields:
-                            raise BotError(
+                            msg = (
                                 'Page {}, SubmissionMustFail: '
                                 'Expected error_fields were {}, but actual '
                                 'error_fields are {}'.format(
                                     PageName, expected_error_fields, actual_error_fields
                                 )
                             )
+                            raise BotError(msg)
                 return response
         try:
             self.before_next_page()
@@ -872,11 +876,12 @@ class Page(FormPageOrInGameWaitPage):
                     )
                     return HttpResponse(BOT_COMPLETE_HTML_MESSAGE)
                 else:
-                    raise BotError(
+                    msg = (
                         'Finished the last page, '
                         'but the bot is still trying '
                         'to submit more data ({}).'.format(submission)
                     )
+                    raise BotError(msg)
         self._increment_index_in_pages()
         return self._redirect_to_page_the_user_should_be_on()
 
@@ -1331,13 +1336,14 @@ class WaitPage(FormPageOrInGameWaitPage, GenericWaitPageMixin):
         Constants = self._Constants
 
         if Constants.players_per_group is None:
-            raise AssertionError(
+            msg = (
                 'Page "{}": if using group_by_arrival_time, you must either set '
                 'Constants.players_per_group to a value other than None, '
                 'or define get_players_for_group() on the page.'.format(
                     self.__class__.__name__
                 )
             )
+            raise AssertionError(msg)
 
         if len(waiting_players) >= Constants.players_per_group:
             return waiting_players[: Constants.players_per_group]
