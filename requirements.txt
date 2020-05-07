@@ -47,7 +47,7 @@ redis==3.3.8
 schema==0.7.0
 sentry-sdk==0.7.9
 termcolor==1.1.0
-Twisted>=19.7.0rc1
+Twisted==19.7.0
 txaio==18.8.1
 urllib3==1.25.3
 whitenoise==4.1.3
